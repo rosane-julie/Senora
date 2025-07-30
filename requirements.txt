@@ -1,2 +1,3 @@
 Flask
 pyasn1
+asn1tools
