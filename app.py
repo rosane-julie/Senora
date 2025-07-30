@@ -1,64 +1,62 @@
-from flask import Flask, request, jsonify, session, send_file, render_template
-from pyasn1.codec.ber import decoder as ber_decoder, encoder as ber_encoder
-from pyasn1.codec.native import decoder as native_decoder, encoder as native_encoder
-from pyasn1.type import univ, namedtype
-import binascii
-import io
+from flask import Flask, request, jsonify, send_file, session, render_template
 import base64
+import io
 import logging
 
-# Configure basic logging
-logging.basicConfig(level=logging.DEBUG)
+from asn1_parser import decode_ber, encode_ber
 
-# Placeholder for future custom ASN.1 schema
-CUSTOM_ASN1_SCHEMA = univ.Sequence(
-    componentType=namedtype.NamedTypes(
-        # Fields will be defined here in the future
-    )
-)
+logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 app.secret_key = 'super-secret-key-change-me'
 
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('edit.html')
+
 
 @app.route('/upload', methods=['POST'])
 def upload():
-    file = request.files.get('asnfile')
-    if not file:
-        return jsonify({'error': 'No file uploaded'}), 400
-    # Ensure the file is read in binary mode
-    data = file.stream.read()
-    # Log first 50 bytes for debugging
-    logging.debug("Uploaded data first 50 bytes: %s", data[:50])
+    xml_file = request.files.get('decoder')
+    ber_file = request.files.get('cdr')
+    if not xml_file or not ber_file:
+        return jsonify({'error': 'Both decoder and CDR files are required'}), 400
 
-    session['orig_bytes'] = base64.b64encode(data).decode('utf-8')
+    xml_bytes = xml_file.read()
+    ber_bytes = ber_file.read()
     try:
-        asn1_obj, _ = ber_decoder.decode(data, asn1Spec=univ.Sequence())
-        py_data = native_decoder.decode(asn1_obj)
+        decoded, spec = decode_ber(xml_bytes, ber_bytes)
     except Exception as exc:
-        logging.exception("BER decode failed")
-        return jsonify({'error': 'Failed to decode ASN.1 data'}), 400
+        logging.exception('Decode failed')
+        return jsonify({'error': f'Failed to decode data: {exc}'}), 400
 
-    hex_view = binascii.hexlify(data).decode('utf-8')
-    return jsonify({'json': py_data, 'hex': hex_view})
+    session['spec'] = base64.b64encode(spec.encode('utf-8')).decode('utf-8')
+    session['original'] = base64.b64encode(ber_bytes).decode('utf-8')
+    return jsonify(decoded)
+
 
 @app.route('/save', methods=['POST'])
 def save():
     json_data = request.get_json()
-    if json_data is None:
-        return jsonify({'error': 'No data provided'}), 400
-    if 'orig_bytes' not in session:
-        return jsonify({'error': 'No original data'}), 400
-    orig_bytes = base64.b64decode(session['orig_bytes'])
-    asn1_spec, _ = ber_decoder.decode(orig_bytes)
-    asn1_obj = native_encoder.encode(json_data, asn1Spec=asn1_spec)
-    encoded = ber_encoder.encode(asn1_obj)
-    return send_file(io.BytesIO(encoded), as_attachment=True,
-                     download_name='modified_cdr.dat',
-                     mimetype='application/octet-stream')
+    spec_b64 = session.get('spec')
+    if json_data is None or spec_b64 is None:
+        return jsonify({'error': 'Missing session data'}), 400
+
+    spec = base64.b64decode(spec_b64).decode('utf-8')
+    try:
+        encoded = encode_ber(spec, json_data)
+    except Exception as exc:
+        logging.exception('Encode failed')
+        return jsonify({'error': f'Failed to encode data: {exc}'}), 400
+
+    return send_file(
+        io.BytesIO(encoded),
+        as_attachment=True,
+        download_name='modified_cdr.dat',
+        mimetype='application/octet-stream'
+    )
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0')

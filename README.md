@@ -1,6 +1,6 @@
 # Senora ASN Editor
 
-Senora is a simple web interface for viewing and editing ASN.1 data.
+Senora provides a web interface for decoding and editing BER encoded CDR files using XML decoder definitions.
 
 ## Installation
 
@@ -18,4 +18,6 @@ Run the Flask application:
 python app.py
 ```
 
-Open your browser to `http://localhost:5000` to use the editor.
+Open your browser to `http://localhost:5000`.
+Upload an XML decoder and a BER CDR file to view and edit the decoded
+content. After editing you can download the modified CDR as a BER file.
