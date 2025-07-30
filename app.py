@@ -1,9 +1,21 @@
 from flask import Flask, request, jsonify, session, send_file, render_template
 from pyasn1.codec.ber import decoder as ber_decoder, encoder as ber_encoder
 from pyasn1.codec.native import decoder as native_decoder, encoder as native_encoder
+from pyasn1.type import univ, namedtype
 import binascii
 import io
 import base64
+import logging
+
+# Configure basic logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Placeholder for future custom ASN.1 schema
+CUSTOM_ASN1_SCHEMA = univ.Sequence(
+    componentType=namedtype.NamedTypes(
+        # Fields will be defined here in the future
+    )
+)
 
 app = Flask(__name__)
 app.secret_key = 'super-secret-key-change-me'
@@ -17,10 +29,19 @@ def upload():
     file = request.files.get('asnfile')
     if not file:
         return jsonify({'error': 'No file uploaded'}), 400
-    data = file.read()
+    # Ensure the file is read in binary mode
+    data = file.stream.read()
+    # Log first 50 bytes for debugging
+    logging.debug("Uploaded data first 50 bytes: %s", data[:50])
+
     session['orig_bytes'] = base64.b64encode(data).decode('utf-8')
-    asn1_obj, _ = ber_decoder.decode(data)
-    py_data = native_decoder.decode(asn1_obj)
+    try:
+        asn1_obj, _ = ber_decoder.decode(data, asn1Spec=univ.Sequence())
+        py_data = native_decoder.decode(asn1_obj)
+    except Exception as exc:
+        logging.exception("BER decode failed")
+        return jsonify({'error': 'Failed to decode ASN.1 data'}), 400
+
     hex_view = binascii.hexlify(data).decode('utf-8')
     return jsonify({'json': py_data, 'hex': hex_view})
 
