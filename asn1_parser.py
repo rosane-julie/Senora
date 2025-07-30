@@ -1,5 +1,5 @@
 import xml.etree.ElementTree as ET
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Any
 import asn1tools
 
 TYPE_MAP = {
@@ -45,7 +45,8 @@ def build_asn1_spec(fields: List[Dict[str, str]]) -> str:
     return '\n'.join(lines)
 
 
-def compile_spec(xml_bytes: bytes) -> Tuple[asn1tools.compiler.AbstractCompiler, str]:
+
+def compile_spec(xml_bytes: bytes) -> Tuple[Any, str]:
     """Parse Huawei style XML and compile a temporary ASN.1 module."""
     try:
         root = ET.fromstring(xml_bytes)
